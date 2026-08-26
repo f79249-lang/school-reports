@@ -446,14 +446,6 @@ def make_report_html(data, proposal):
           <div class="priority {priority_class(v['priority'])}">{esc(v['priority'])}</div>
         </div>""")
 
-    logo_data=""
-    logo_path=Path(__file__).with_name('moe_logo.png')
-    if logo_path.exists():
-        import base64
-        logo_data="data:image/png;base64,"+base64.b64encode(logo_path.read_bytes()).decode()
-
-    logo_html=f'<img class="logo" src="{logo_data}">' if logo_data else ''
-
     return f"""<!doctype html>
 <html lang="ar" dir="rtl">
 <head>
@@ -477,7 +469,7 @@ body{{
 }}
 .header{{
   display:grid;
-  grid-template-columns:260px minmax(0,1fr) 220px;
+  grid-template-columns:300px minmax(0,1fr);
   gap:18px;
   align-items:center;
   border-bottom:5px solid #006E73;
@@ -513,14 +505,6 @@ body{{
   font-weight:700;
   white-space:normal;
   overflow-wrap:anywhere;
-}}
-.logo{{
-  width:100%;
-  max-width:210px;
-  max-height:140px;
-  object-fit:contain;
-  display:block;
-  margin:0 auto;
 }}
 .section{{
   margin-top:20px;
@@ -606,8 +590,7 @@ body{{
   .report{{padding:14px}}
   .header{{grid-template-columns:1fr}}
   .gov,.title,.header>div{{text-align:center}}
-  .logo{{max-width:180px}}
-  .grid3,.two,.metrics{{grid-template-columns:1fr}}
+    .grid3,.two,.metrics{{grid-template-columns:1fr}}
   .indicator{{grid-template-columns:1fr}}
 }}
 @media print{{
@@ -621,7 +604,6 @@ body{{
   <div class="header">
     <div class="gov">المملكة العربية السعودية<br>وزارة التعليم<br>الإدارة العامة للتعليم بمنطقة الباحة<br>مساعد مدير عام التعليم<br>جودة خدمات المركز الوطني للمناهج</div>
     <div class="title"><h1>مقترحات الخطط الدراسية</h1><div class="school">{esc(data['school_name'])}</div></div>
-    <div>{logo_html}</div>
   </div>
 
   <div class="section">

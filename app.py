@@ -88,32 +88,94 @@ def extract_school_name(pdf_name, doc):
     return 'اسم المدرسة'
 
 
+
+GRADE_WORDS = [
+    'الأول','الثاني','الثالث','الرابع','الخامس','السادس',
+    'السابع','الثامن','التاسع','العاشر','الحادي عشر','الثاني عشر'
+]
+
+def detect_grade(texts):
+    joined=' '.join(texts)
+    # Match longer grade names first.
+    for g in sorted(GRADE_WORDS,key=len,reverse=True):
+        if f'الصف {g}' in joined or ('الصف' in texts and g in joined):
+            return f'الصف {g}'
+    return 'صف غير محدد'
+
+
+def unique_by_grade(records):
+    out={}
+    for r in records:
+        g=r['grade']
+        # Prefer the record that contains a signed gap/change.
+        if g not in out:
+            out[g]=r
+    return out
+
+
+def grade_options(raw, subject):
+    p2=set(raw.get('p2_candidates',{}).get(subject,{}).keys())
+    p3=set(raw.get('p3_candidates',{}).get(subject,{}).keys())
+    common=sorted(p2 & p3)
+    if common:
+        return common
+    return sorted(p2 | p3)
+
+
+def resolve_data(raw, selections):
+    data={
+        'school_name':raw['school_name'],
+        'p2':{},'p3':{},
+        'p7':raw['p7'],'p10':raw['p10']
+    }
+    for s in SUBJECTS:
+        grade=selections.get(s)
+        if grade:
+            if grade in raw.get('p2_candidates',{}).get(s,{}):
+                data['p2'][s]=raw['p2_candidates'][s][grade]['data']
+            if grade in raw.get('p3_candidates',{}).get(s,{}):
+                data['p3'][s]=raw['p3_candidates'][s][grade]['data']
+    data['selected_grades']=selections.copy()
+    return data
+
+
 def parse_pdf(pdf_bytes, pdf_name):
     doc=fitz.open(stream=pdf_bytes,filetype='pdf')
-    data={'school_name':extract_school_name(pdf_name,doc)}
+    raw={'school_name':extract_school_name(pdf_name,doc)}
 
-    # صفحة 2
-    p2={}; bls=words_by_block(doc[1])
+    # صفحة 2: نجمع جميع الصفوف المتاحة لكل مادة ولا نختار من تلقاء أنفسنا.
+    p2_candidates={s:{} for s in SUBJECTS}
+    bls=words_by_block(doc[1])
     for s in SUBJECTS:
-        cands=[b for b in bls if s in b['texts'] and 'السادس' in b['texts'] and len(pct_values(b))>=2]
-        if cands:
-            b=cands[0]; ps=pct_values(b)
-            school=min(ps,key=lambda x:abs(x[1]-0.68))[0]
-            admin=min(ps,key=lambda x:abs(x[1]-0.33))[0]
-            p2[s]={'school':school,'admin':admin,'gap':signed_value(b)}
-    data['p2']=p2
+        records=[]
+        for b in bls:
+            if s in b['texts'] and 'الصف' in b['texts'] and len(pct_values(b))>=2 and signed_value(b) is not None:
+                ps=pct_values(b)
+                school=min(ps,key=lambda x:abs(x[1]-0.68))[0]
+                admin=min(ps,key=lambda x:abs(x[1]-0.33))[0]
+                records.append({
+                    'grade':detect_grade(b['texts']),
+                    'data':{'school':school,'admin':admin,'gap':signed_value(b)}
+                })
+        p2_candidates[s]=unique_by_grade(records)
+    raw['p2_candidates']=p2_candidates
 
-    # صفحة 3
-    p3={}; bls=words_by_block(doc[2])
+    # صفحة 3: نجمع جميع الصفوف المتاحة لكل مادة من جدول التغير بين العامين.
+    p3_candidates={s:{} for s in SUBJECTS}
+    bls=words_by_block(doc[2])
     for s in SUBJECTS:
-        cands=[b for b in bls if s in b['texts'] and 'السادس' in b['texts']
-               and len(pct_values(b))>=2 and signed_value(b) is not None]
-        if cands:
-            b=cands[-1]; ps=pct_values(b)
-            y1446=min(ps,key=lambda x:abs(x[1]-0.40))[0]
-            y1445=min(ps,key=lambda x:abs(x[1]-0.53))[0]
-            p3[s]={'y1445':y1445,'y1446':y1446,'change':signed_value(b)}
-    data['p3']=p3
+        records=[]
+        for b in bls:
+            if s in b['texts'] and 'الصف' in b['texts'] and len(pct_values(b))>=2 and signed_value(b) is not None:
+                ps=pct_values(b)
+                y1446=min(ps,key=lambda x:abs(x[1]-0.40))[0]
+                y1445=min(ps,key=lambda x:abs(x[1]-0.53))[0]
+                records.append({
+                    'grade':detect_grade(b['texts']),
+                    'data':{'y1445':y1445,'y1446':y1446,'change':signed_value(b)}
+                })
+        p3_candidates[s]=unique_by_grade(records)
+    raw['p3_candidates']=p3_candidates
 
     # صفحة 7
     p7={}; bls=words_by_block(doc[6])
@@ -128,7 +190,7 @@ def parse_pdf(pdf_bytes, pdf_name):
             b=cands[0]; ps=pct_values(b)
             degree=min(ps,key=lambda x:abs(x[1]-0.56))[0]
             p7[k]={'value':degree,'priority':priority(b['texts'])}
-    data['p7']=p7
+    raw['p7']=p7
 
     # صفحة 10
     p10={}; bls=words_by_block(doc[9])
@@ -139,8 +201,8 @@ def parse_pdf(pdf_bytes, pdf_name):
             b=cands[0]; nums=num_values(b)
             degree=min(nums,key=lambda x:abs(x[1]-0.35))[0]
             p10[s]={'value':degree,'priority':priority(b['texts'])}
-    data['p10']=p10
-    return data
+    raw['p10']=p10
+    return raw
 
 
 def extract_proposal(xlsx_bytes, school_name):
@@ -228,7 +290,8 @@ def make_report_image(data, proposal):
     xs=[250,700,1150]
     for s,x in zip(SUBJECTS,xs):
         v=data['p2'][s]
-        center(s,x,340,23)
+        center(s,x,330,23)
+        center(data.get('selected_grades',{}).get(s,''),x,365,15,GRAY)
         rr(x-170,395,x+170,720,fill=PALE)
         center('نتيجة المدرسة',x,420,18,TEAL)
         center(f"{v['school']:.1f}%",x,463,40,TEAL)
@@ -243,7 +306,8 @@ def make_report_image(data, proposal):
     for s,x in zip(SUBJECTS,xs):
         v=data['p3'][s]
         rr(x-190,970,x+190,1265,fill=PALE)
-        center(s,x,990,23)
+        center(s,x,980,23)
+        center(data.get('selected_grades',{}).get(s,''),x,1015,15,GRAY)
         center('1445هـ',x-80,1050,17,GRAY)
         center(f"{v['y1445']:.1f}%",x-80,1090,31,GREEN)
         center('1446هـ',x+80,1050,17,GRAY)
@@ -325,7 +389,7 @@ h1,h2,h3,p,div,span,label {direction: rtl; text-align: right;}
 """, unsafe_allow_html=True)
 
 st.title('مولد تقارير مقترحات الخطط الدراسية')
-st.caption('يرفع المستخدم تقرير المدرسة وملف Excel فقط. الأرقام من الصفحات 2 و3 و7 و10، والمقترح من Excel.')
+st.caption('يرفع المستخدم تقرير المدرسة وملف Excel فقط. الأرقام من الصفحات 2 و3 و7 و10، والمقترح من Excel. يدعم الصفوف المختلفة دون افتراض صف ثابت.')
 
 c1,c2=st.columns(2)
 with c1:
@@ -333,28 +397,65 @@ with c1:
 with c2:
     xlsx=st.file_uploader('ملف Excel المعتمد',type=['xlsx','xlsm'])
 
-if 'data' not in st.session_state:
+if 'raw' not in st.session_state:
+    st.session_state.raw=None
     st.session_state.data=None
     st.session_state.proposal=None
+    st.session_state.png=None
+    st.session_state.pdf=None
 
 if pdf and xlsx:
     if st.button('استخراج البيانات',type='primary'):
         try:
-            data=parse_pdf(pdf.getvalue(),pdf.name)
-            proposal=extract_proposal(xlsx.getvalue(),data['school_name'])
-            problems=validate(data)
-            if problems:
-                st.error('لم يكتمل الاستخراج في: '+ '، '.join(problems))
-                st.session_state.data=None
-                st.session_state.proposal=None
-            else:
-                st.session_state.data=data
-                st.session_state.proposal=proposal
-                st.success('تم استخراج جميع البيانات بنجاح.')
+            raw=parse_pdf(pdf.getvalue(),pdf.name)
+            proposal=extract_proposal(xlsx.getvalue(),raw['school_name'])
+            st.session_state.raw=raw
+            st.session_state.proposal=proposal
+            st.session_state.data=None
+            st.session_state.png=None
+            st.session_state.pdf=None
+            st.success('تم استخراج البيانات الأولية. حدّد الصف المطلوب إذا ظهر أكثر من صف.')
         except Exception as e:
             st.exception(e)
 else:
     st.info('ارفع ملف PDF وملف Excel أولًا.')
+
+raw=st.session_state.raw
+if raw:
+    st.divider()
+    st.subheader('اختيار الصفوف لنتائج نافس')
+    st.caption('إذا وجد البرنامج صفًا واحدًا للمادة فسيعتمده تلقائيًا. إذا وجد أكثر من صف فاختر الصف الذي تريد أن يبنى عليه التقرير.')
+
+    selections={}
+    all_ok=True
+    cols=st.columns(3)
+    for col,s in zip(cols,SUBJECTS):
+        opts=grade_options(raw,s)
+        with col:
+            if not opts:
+                st.error(f'{s}: لم يتم العثور على صف صالح في الصفحتين 2 و3.')
+                all_ok=False
+            elif len(opts)==1:
+                selections[s]=opts[0]
+                st.success(f'{s}: {opts[0]}')
+            else:
+                selections[s]=st.selectbox(
+                    f'اختر الصف لمادة {s}',
+                    opts,
+                    key=f'grade_{s}'
+                )
+
+    if all_ok and st.button('اعتماد الصفوف وإظهار المراجعة',type='primary'):
+        data=resolve_data(raw,selections)
+        problems=validate(data)
+        if problems:
+            st.error('لم يكتمل الاستخراج بعد اختيار الصف في: '+ '، '.join(problems))
+            st.session_state.data=None
+        else:
+            st.session_state.data=data
+            st.session_state.png=None
+            st.session_state.pdf=None
+            st.success('تم اعتماد الصفوف واستخراج جميع الفقرات بنجاح.')
 
 data=st.session_state.data
 proposal=st.session_state.proposal
@@ -374,6 +475,7 @@ if data:
             st.markdown(
                 f"""<div class="report-card">
                 <div class="metric-title">{s}</div>
+                <div style="color:#6B7280;font-size:13px">{data.get('selected_grades',{}).get(s,'')}</div>
                 <div>المدرسة: <b>{a['school']:.1f}%</b></div>
                 <div>الإدارة: <b>{a['admin']:.1f}%</b></div>
                 <div style="color:{RED};font-weight:700">الفارق: {a['gap']:.1f} نقطة مئوية</div>
@@ -389,6 +491,7 @@ if data:
             st.markdown(
                 f"""<div class="report-card">
                 <div class="metric-title">{s}</div>
+                <div style="color:#6B7280;font-size:13px">{data.get('selected_grades',{}).get(s,'')}</div>
                 <div>1445هـ: <b>{b['y1445']:.1f}%</b></div>
                 <div>1446هـ: <b>{b['y1446']:.1f}%</b></div>
                 <div style="color:{colr};font-weight:700">التغير: {b['change']:+.1f} نقطة مئوية</div>

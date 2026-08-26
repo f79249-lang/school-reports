@@ -226,14 +226,44 @@ def validate(data):
 
 
 def font_path(bold=False):
-    candidates=(['/usr/share/fonts/truetype/noto/NotoKufiArabic-Bold.ttf',
-                 '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf']
-                if bold else
-                ['/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf',
-                 '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'])
-    for p in candidates:
-        if os.path.exists(p): return p
-    return candidates[-1]
+    """ابحث عن خط عربي/يونيكود موجود فعليًا على خادم Streamlit."""
+    preferred = (
+        ['NotoKufiArabic-Bold.ttf', 'NotoSansArabic-Bold.ttf',
+         'DejaVuSans-Bold.ttf', 'LiberationSans-Bold.ttf']
+        if bold else
+        ['NotoSansArabic-Regular.ttf', 'NotoKufiArabic-Regular.ttf',
+         'DejaVuSans.ttf', 'LiberationSans-Regular.ttf']
+    )
+
+    roots = [
+        Path('/usr/share/fonts'),
+        Path('/usr/local/share/fonts'),
+        Path('/home/adminuser/.local/share/fonts'),
+        Path('/home/appuser/.local/share/fonts'),
+    ]
+
+    # البحث بالاسم أولًا
+    for wanted in preferred:
+        for root in roots:
+            if root.exists():
+                matches = list(root.rglob(wanted))
+                if matches:
+                    return str(matches[0])
+
+    # ثم أي خط TrueType/OpenType متاح يدعم Unicode غالبًا
+    fallback_names = (
+        ['*Bold*.ttf', '*Bold*.otf', '*.ttf', '*.otf']
+        if bold else
+        ['*.ttf', '*.otf']
+    )
+    for pattern in fallback_names:
+        for root in roots:
+            if root.exists():
+                matches = list(root.rglob(pattern))
+                if matches:
+                    return str(matches[0])
+
+    return None
 
 
 def proposal_lines(text, max_chars=70):
@@ -257,7 +287,15 @@ def make_report_image(data, proposal):
     im=Image.new('RGB',(W,H),WHITE); d=ImageDraw.Draw(im)
     FB=font_path(True); FR=font_path(False)
 
-    def F(sz,b=True): return ImageFont.truetype(FB if b else FR,sz)
+    def F(sz,b=True):
+        path = FB if b else FR
+        if path:
+            try:
+                return ImageFont.truetype(path, sz)
+            except Exception:
+                pass
+        # fallback يمنع تعطل إنشاء التقرير حتى لو اختلفت خطوط خادم Streamlit
+        return ImageFont.load_default()
     def center(txt,x,y,sz,color=NAVY,b=True):
         t=ar(txt); f=F(sz,b); box=d.textbbox((0,0),t,font=f)
         d.text((x-(box[2]-box[0])/2,y),t,font=f,fill=color)
@@ -389,6 +427,9 @@ h1,h2,h3,p,div,span,label {direction: rtl; text-align: right;}
 """, unsafe_allow_html=True)
 
 st.title('مولد تقارير مقترحات الخطط الدراسية')
+if not font_path(False) or not font_path(True):
+    st.warning('لم يعثر الخادم على خط عربي مخصص؛ سيستخدم التطبيق خطًا احتياطيًا دون إيقاف إنشاء التقرير.')
+
 st.caption('يرفع المستخدم تقرير المدرسة وملف Excel فقط. الأرقام من الصفحات 2 و3 و7 و10، والمقترح من Excel. يدعم الصفوف المختلفة دون افتراض صف ثابت.')
 
 c1,c2=st.columns(2)

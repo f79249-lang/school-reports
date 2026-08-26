@@ -385,6 +385,154 @@ def make_report_image(data, proposal):
     return bio.getvalue()
 
 
+
+def make_report_html(data, proposal):
+    """أنشئ التقرير النهائي كـ HTML حتى يعرض المتصفح العربية بخطوطه الأصلية."""
+    def esc(x):
+        import html
+        return html.escape(str(x))
+
+    def priority_class(p):
+        if 'عاجلة' in p: return 'urgent'
+        if 'مرتفعة' in p: return 'high'
+        if 'استدامة' in p: return 'good'
+        return 'medium'
+
+    p2_cards=[]
+    p3_cards=[]
+    p7_cards=[]
+    p10_rows=[]
+
+    for s in SUBJECTS:
+        v=data['p2'][s]
+        grade=data.get('selected_grades',{}).get(s,'')
+        p2_cards.append(f"""
+        <div class="card">
+          <h3>{esc(s)}</h3>
+          <div class="grade">{esc(grade)}</div>
+          <div class="label">نتيجة المدرسة</div><div class="value teal">{v['school']:.1f}%</div>
+          <div class="label">نتيجة الإدارة</div><div class="value gray">{v['admin']:.1f}%</div>
+          <div class="label">الفارق</div><div class="value red">{v['gap']:.1f} نقطة</div>
+        </div>""")
+
+        t=data['p3'][s]
+        cls='red' if t['change']<0 else 'green'
+        p3_cards.append(f"""
+        <div class="card">
+          <h3>{esc(s)}</h3>
+          <div class="grade">{esc(grade)}</div>
+          <div class="years">
+            <div><span class="label">1445هـ</span><div class="value green">{t['y1445']:.1f}%</div></div>
+            <div><span class="label">1446هـ</span><div class="value {cls}">{t['y1446']:.1f}%</div></div>
+          </div>
+          <div class="change {cls}">التغير: {t['change']:+.1f} نقطة مئوية</div>
+        </div>""")
+
+    for k in ['التحصيل العلمي','نواتج التعلم','التعليم والتعلم']:
+        v=data['p7'][k]
+        p7_cards.append(f"""
+        <div class="metric">
+          <div class="metric-title">{esc(k)}</div>
+          <div class="metric-value">{v['value']:.2f}%</div>
+          <div class="priority {priority_class(v['priority'])}">{esc(v['priority'])}</div>
+        </div>""")
+
+    for s in SUBJECTS:
+        v=data['p10'][s]
+        p10_rows.append(f"""
+        <div class="indicator">
+          <div class="subject">{esc(s)}</div>
+          <div class="indicator-value">{v['value']:.2f}%</div>
+          <div class="priority {priority_class(v['priority'])}">{esc(v['priority'])}</div>
+        </div>""")
+
+    logo_data=""
+    logo_path=Path(__file__).with_name('moe_logo.png')
+    if logo_path.exists():
+        import base64
+        logo_data="data:image/png;base64,"+base64.b64encode(logo_path.read_bytes()).decode()
+
+    logo_html=f'<img class="logo" src="{logo_data}">' if logo_data else ''
+
+    return f"""<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@400;600;700&family=Noto+Sans+Arabic:wght@400;600;700&display=swap');
+*{{box-sizing:border-box}}
+body{{margin:0;background:white;color:#123E5A;font-family:'Noto Sans Arabic','Tahoma','Arial',sans-serif}}
+.report{{width:1100px;max-width:100%;margin:auto;padding:28px}}
+.header{{display:grid;grid-template-columns:1.1fr 2fr 1fr;gap:18px;align-items:start;border-bottom:5px solid #006E73;padding-bottom:18px}}
+.gov{{text-align:center;line-height:1.9;font-weight:700;font-size:17px}}
+.title{{text-align:center}}
+.title h1{{margin:0 0 12px;font-family:'Noto Kufi Arabic',sans-serif;font-size:34px}}
+.school{{display:inline-block;background:#006E73;color:white;padding:10px 26px;border-radius:20px;font-size:23px;font-weight:700}}
+.logo{{max-width:220px;max-height:150px;display:block;margin:auto}}
+.section{{margin-top:20px;border:1px solid #B9D5D8;border-radius:18px;overflow:hidden}}
+.section-title{{background:#123E5A;color:white;text-align:center;padding:11px;font-size:22px;font-weight:700}}
+.section-body{{padding:16px}}
+.grid3{{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}}
+.card,.metric{{background:#F4F9FA;border:1px solid #D8E7E9;border-radius:14px;padding:15px;text-align:center}}
+.card h3{{margin:0 0 3px;font-size:21px}} .grade{{font-size:13px;color:#6B7280;margin-bottom:12px}}
+.label{{font-size:14px;color:#6B7280;margin-top:7px}}
+.value{{font-size:29px;font-weight:800;margin:2px 0}}
+.teal{{color:#006E73}} .gray{{color:#6B7280}} .red{{color:#C62828}} .green{{color:#166534}}
+.years{{display:grid;grid-template-columns:1fr 1fr;gap:10px}}
+.change{{font-size:18px;font-weight:800;margin-top:10px}}
+.two{{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:20px}}
+.metrics{{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}}
+.metric-title{{font-weight:700;font-size:16px}} .metric-value{{font-size:28px;font-weight:800;margin:7px 0}}
+.priority{{font-weight:700;font-size:14px}} .urgent{{color:#C62828}} .high{{color:#C86B00}} .good{{color:#166534}} .medium{{color:#006E73}}
+.indicators{{display:grid;gap:10px}}
+.indicator{{display:grid;grid-template-columns:1fr .8fr 1fr;gap:10px;align-items:center;background:#F4F9FA;border:1px solid #D8E7E9;border-radius:12px;padding:12px}}
+.subject{{font-weight:700}} .indicator-value{{font-size:24px;font-weight:800}}
+.proposal{{margin-top:20px;border:2px solid #006E73;border-radius:18px;padding:24px;text-align:center;background:#F8FCFC}}
+.proposal-label{{display:inline-block;background:#006E73;color:white;padding:7px 28px;border-radius:14px;font-weight:700;font-size:21px;margin-top:-44px}}
+.proposal-text{{font-size:24px;font-weight:800;color:#166534;margin-top:18px;line-height:1.8}}
+@media(max-width:800px){{.header,.grid3,.two,.metrics{{grid-template-columns:1fr}}}}
+@media print{{body{{background:white}} .report{{width:100%;padding:0}}}}
+</style>
+</head>
+<body>
+<div class="report">
+  <div class="header">
+    <div class="gov">المملكة العربية السعودية<br>وزارة التعليم<br>الإدارة العامة للتعليم بمنطقة الباحة<br>مساعد مدير عام التعليم<br>جودة خدمات المركز الوطني للمناهج</div>
+    <div class="title"><h1>مقترحات الخطط الدراسية</h1><div class="school">{esc(data['school_name'])}</div></div>
+    <div>{logo_html}</div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">1. الفرق بين المدرسة والإدارة</div>
+    <div class="section-body"><div class="grid3">{''.join(p2_cards)}</div></div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">2. التغيير بين عامي 1445هـ و1446هـ</div>
+    <div class="section-body"><div class="grid3">{''.join(p3_cards)}</div></div>
+  </div>
+
+  <div class="two">
+    <div class="section" style="margin-top:0">
+      <div class="section-title">3. نتائج المدرسة في المجالات</div>
+      <div class="section-body"><div class="metrics">{''.join(p7_cards)}</div></div>
+    </div>
+
+    <div class="section" style="margin-top:0">
+      <div class="section-title">4. مستوى المدرسة في المجالات (مؤشرات)</div>
+      <div class="section-body"><div class="indicators">{''.join(p10_rows)}</div></div>
+    </div>
+  </div>
+
+  <div class="proposal">
+    <div class="proposal-label">الاقتراح</div>
+    <div class="proposal-text">{esc(proposal)}</div>
+  </div>
+</div>
+</body></html>"""
+
+
 def png_to_pdf(png_bytes):
     image=Image.open(io.BytesIO(png_bytes)).convert('RGB')
     bio=io.BytesIO()
@@ -435,6 +583,7 @@ if 'raw' not in st.session_state:
     st.session_state.proposal=None
     st.session_state.png=None
     st.session_state.pdf=None
+    st.session_state.report_html=None
 
 if pdf and xlsx:
     if st.button('استخراج البيانات',type='primary'):
@@ -561,29 +710,22 @@ if data:
     st.warning('راجع القيم أعلاه. إذا كانت صحيحة اضغط زر إنشاء التقرير النهائي.')
 
     if st.button('إنشاء التقرير النهائي',type='primary'):
-        png=make_report_image(data,proposal)
-        pdf_bytes=png_to_pdf(png)
-        st.session_state.png=png
-        st.session_state.pdf=pdf_bytes
+        report_html=make_report_html(data,proposal)
+        st.session_state.report_html=report_html
 
-if st.session_state.get('png'):
+if st.session_state.get('report_html'):
     st.divider()
     st.markdown('## التقرير النهائي')
-    st.image(st.session_state.png,use_container_width=True)
-    c1,c2=st.columns(2)
-    with c1:
-        st.download_button(
-            'تحميل التقرير PNG',
-            st.session_state.png,
-            file_name=f"تقرير_{data['school_name']}.png",
-            mime='image/png',
-            use_container_width=True
-        )
-    with c2:
-        st.download_button(
-            'تحميل التقرير PDF',
-            st.session_state.pdf,
-            file_name=f"تقرير_{data['school_name']}.pdf",
-            mime='application/pdf',
-            use_container_width=True
-        )
+    st.info('التقرير النهائي الآن يُعرض كصفحة ويب عربية أصلية، لذلك لا يعتمد على خطوط خادم Streamlit ولا تظهر الحروف كمربعات.')
+    import streamlit.components.v1 as components
+    components.html(st.session_state.report_html,height=1800,scrolling=True)
+
+    st.download_button(
+        'تحميل التقرير HTML',
+        st.session_state.report_html.encode('utf-8'),
+        file_name=f"تقرير_{data['school_name']}.html",
+        mime='text/html',
+        use_container_width=True
+    )
+
+    st.caption('لحفظه PDF: افتح ملف HTML بعد تنزيله في المتصفح ثم اختر طباعة ← حفظ بصيغة PDF. بهذه الطريقة يستخدم جهازك الخط العربي مباشرة.')

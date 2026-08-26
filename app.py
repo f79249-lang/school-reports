@@ -460,39 +460,160 @@ def make_report_html(data, proposal):
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@400;600;700&family=Noto+Sans+Arabic:wght@400;600;700&display=swap');
 *{{box-sizing:border-box}}
-body{{margin:0;background:white;color:#123E5A;font-family:'Noto Sans Arabic','Tahoma','Arial',sans-serif}}
-.report{{width:1100px;max-width:100%;margin:auto;padding:28px}}
-.header{{display:grid;grid-template-columns:1.1fr 2fr 1fr;gap:18px;align-items:start;border-bottom:5px solid #006E73;padding-bottom:18px}}
-.gov{{text-align:center;line-height:1.9;font-weight:700;font-size:17px}}
-.title{{text-align:center}}
-.title h1{{margin:0 0 12px;font-family:'Noto Kufi Arabic',sans-serif;font-size:34px}}
-.school{{display:inline-block;background:#006E73;color:white;padding:10px 26px;border-radius:20px;font-size:23px;font-weight:700}}
-.logo{{max-width:220px;max-height:150px;display:block;margin:auto}}
-.section{{margin-top:20px;border:1px solid #B9D5D8;border-radius:18px;overflow:hidden}}
-.section-title{{background:#123E5A;color:white;text-align:center;padding:11px;font-size:22px;font-weight:700}}
+html,body{{margin:0;padding:0;background:#fff;overflow-x:hidden}}
+body{{
+  color:#123E5A;
+  font-family:Tahoma,Arial,"Segoe UI",sans-serif;
+  direction:rtl;
+  text-align:right;
+  -webkit-font-smoothing:antialiased;
+}}
+.report{{
+  width:100%;
+  max-width:1100px;
+  margin:0 auto;
+  padding:24px;
+}}
+.header{{
+  display:grid;
+  grid-template-columns:260px minmax(0,1fr) 220px;
+  gap:18px;
+  align-items:center;
+  border-bottom:5px solid #006E73;
+  padding-bottom:18px;
+}}
+.gov{{
+  text-align:center;
+  line-height:1.9;
+  font-weight:700;
+  font-size:16px;
+  white-space:normal;
+}}
+.title{{
+  text-align:center;
+  min-width:0;
+}}
+.title h1{{
+  margin:0 0 12px;
+  font-family:Tahoma,Arial,"Segoe UI",sans-serif;
+  font-size:32px;
+  line-height:1.5;
+  white-space:normal;
+}}
+.school{{
+  display:inline-block;
+  max-width:100%;
+  background:#006E73;
+  color:white;
+  padding:10px 24px;
+  border-radius:20px;
+  font-size:22px;
+  line-height:1.6;
+  font-weight:700;
+  white-space:normal;
+  overflow-wrap:anywhere;
+}}
+.logo{{
+  width:100%;
+  max-width:210px;
+  max-height:140px;
+  object-fit:contain;
+  display:block;
+  margin:0 auto;
+}}
+.section{{
+  margin-top:20px;
+  border:1px solid #B9D5D8;
+  border-radius:18px;
+  overflow:hidden;
+}}
+.section-title{{
+  background:#123E5A;
+  color:white;
+  text-align:center;
+  padding:11px 16px;
+  font-size:21px;
+  line-height:1.7;
+  font-weight:700;
+}}
 .section-body{{padding:16px}}
-.grid3{{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}}
-.card,.metric{{background:#F4F9FA;border:1px solid #D8E7E9;border-radius:14px;padding:15px;text-align:center}}
-.card h3{{margin:0 0 3px;font-size:21px}} .grade{{font-size:13px;color:#6B7280;margin-bottom:12px}}
+.grid3{{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:14px;
+}}
+.card,.metric{{
+  background:#F4F9FA;
+  border:1px solid #D8E7E9;
+  border-radius:14px;
+  padding:15px;
+  text-align:center;
+  min-width:0;
+}}
+.card h3{{margin:0 0 3px;font-size:20px;line-height:1.6}}
+.grade{{font-size:13px;color:#6B7280;margin-bottom:12px}}
 .label{{font-size:14px;color:#6B7280;margin-top:7px}}
-.value{{font-size:29px;font-weight:800;margin:2px 0}}
-.teal{{color:#006E73}} .gray{{color:#6B7280}} .red{{color:#C62828}} .green{{color:#166534}}
+.value{{font-size:28px;font-weight:800;margin:2px 0}}
+.teal{{color:#006E73}}.gray{{color:#6B7280}}.red{{color:#C62828}}.green{{color:#166534}}
 .years{{display:grid;grid-template-columns:1fr 1fr;gap:10px}}
-.change{{font-size:18px;font-weight:800;margin-top:10px}}
+.change{{font-size:18px;font-weight:800;margin-top:10px;line-height:1.6}}
 .two{{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:20px}}
-.metrics{{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}}
-.metric-title{{font-weight:700;font-size:16px}} .metric-value{{font-size:28px;font-weight:800;margin:7px 0}}
-.priority{{font-weight:700;font-size:14px}} .urgent{{color:#C62828}} .high{{color:#C86B00}} .good{{color:#166534}} .medium{{color:#006E73}}
+.metrics{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}}
+.metric-title{{font-weight:700;font-size:15px;line-height:1.7}}
+.metric-value{{font-size:27px;font-weight:800;margin:7px 0}}
+.priority{{font-weight:700;font-size:14px;line-height:1.7}}
+.urgent{{color:#C62828}}.high{{color:#C86B00}}.good{{color:#166534}}.medium{{color:#006E73}}
 .indicators{{display:grid;gap:10px}}
-.indicator{{display:grid;grid-template-columns:1fr .8fr 1fr;gap:10px;align-items:center;background:#F4F9FA;border:1px solid #D8E7E9;border-radius:12px;padding:12px}}
-.subject{{font-weight:700}} .indicator-value{{font-size:24px;font-weight:800}}
-.proposal{{margin-top:20px;border:2px solid #006E73;border-radius:18px;padding:24px;text-align:center;background:#F8FCFC}}
-.proposal-label{{display:inline-block;background:#006E73;color:white;padding:7px 28px;border-radius:14px;font-weight:700;font-size:21px;margin-top:-44px}}
-.proposal-text{{font-size:24px;font-weight:800;color:#166534;margin-top:18px;line-height:1.8}}
-@media(max-width:800px){{.header,.grid3,.two,.metrics{{grid-template-columns:1fr}}}}
-@media print{{body{{background:white}} .report{{width:100%;padding:0}}}}
+.indicator{{
+  display:grid;
+  grid-template-columns:1fr .8fr 1fr;
+  gap:10px;
+  align-items:center;
+  background:#F4F9FA;
+  border:1px solid #D8E7E9;
+  border-radius:12px;
+  padding:12px;
+}}
+.subject{{font-weight:700}}.indicator-value{{font-size:23px;font-weight:800}}
+.proposal{{
+  margin-top:20px;
+  border:2px solid #006E73;
+  border-radius:18px;
+  padding:24px;
+  text-align:center;
+  background:#F8FCFC;
+}}
+.proposal-label{{
+  display:inline-block;
+  background:#006E73;
+  color:white;
+  padding:7px 28px;
+  border-radius:14px;
+  font-weight:700;
+  font-size:20px;
+}}
+.proposal-text{{
+  font-size:23px;
+  font-weight:800;
+  color:#166534;
+  margin-top:18px;
+  line-height:1.9;
+  white-space:normal;
+  overflow-wrap:anywhere;
+}}
+@media(max-width:900px){{
+  .report{{padding:14px}}
+  .header{{grid-template-columns:1fr}}
+  .gov,.title,.header>div{{text-align:center}}
+  .logo{{max-width:180px}}
+  .grid3,.two,.metrics{{grid-template-columns:1fr}}
+  .indicator{{grid-template-columns:1fr}}
+}}
+@media print{{
+  html,body{{overflow:visible}}
+  .report{{max-width:none;width:100%;padding:0}}
+}}
 </style>
 </head>
 <body>
@@ -716,9 +837,9 @@ if data:
 if st.session_state.get('report_html'):
     st.divider()
     st.markdown('## التقرير النهائي')
-    st.info('التقرير النهائي الآن يُعرض كصفحة ويب عربية أصلية، لذلك لا يعتمد على خطوط خادم Streamlit ولا تظهر الحروف كمربعات.')
+    st.info('التقرير النهائي يُعرض الآن بتنسيق عربي متجاوب داخل المتصفح، دون اعتماد على خطوط خادم Streamlit.')
     import streamlit.components.v1 as components
-    components.html(st.session_state.report_html,height=1800,scrolling=True)
+    components.html(st.session_state.report_html,height=2200,scrolling=True)
 
     st.download_button(
         'تحميل التقرير HTML',

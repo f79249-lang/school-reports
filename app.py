@@ -9,7 +9,8 @@ import arabic_reshaper
 from bidi.algorithm import get_display
 
 SUBJECTS = ['القراءة','الرياضيات','العلوم']
-NAVY='#123E5A'; TEAL='#006E73'; PALE='#F4F9FA'; BORDER='#B9D5D8'; RED='#C62828'; ORANGE='#C86B00'; GREEN='#166534'; GRAY='#6B7280'; WHITE='#FFFFFF'
+NAVY='#123E5A'; TEAL='#006E73'; PALE='#F4F9FA'; BORDER='#B9D5D8'
+RED='#C62828'; ORANGE='#C86B00'; GREEN='#166534'; GRAY='#6B7280'; WHITE='#FFFFFF'
 
 
 def ar(s):
@@ -79,7 +80,6 @@ def extract_school_name(pdf_name, doc):
     name=re.sub(r'\s*-\s*تقرير تحليل فجوات.*$','',name)
     name=re.sub(r'\.pdf$','',name,flags=re.I).strip()
     if re.search(r'(ابتدائية|متوسطة|ثانوية)',name): return name
-    # fallback from page 1 words
     bls=words_by_block(doc[0])
     for b in bls:
         if any(k in b['texts'] for k in ['ابتدائية','متوسطة','ثانوية']):
@@ -92,7 +92,7 @@ def parse_pdf(pdf_bytes, pdf_name):
     doc=fitz.open(stream=pdf_bytes,filetype='pdf')
     data={'school_name':extract_school_name(pdf_name,doc)}
 
-    # Page 2
+    # صفحة 2
     p2={}; bls=words_by_block(doc[1])
     for s in SUBJECTS:
         cands=[b for b in bls if s in b['texts'] and 'السادس' in b['texts'] and len(pct_values(b))>=2]
@@ -103,10 +103,11 @@ def parse_pdf(pdf_bytes, pdf_name):
             p2[s]={'school':school,'admin':admin,'gap':signed_value(b)}
     data['p2']=p2
 
-    # Page 3
+    # صفحة 3
     p3={}; bls=words_by_block(doc[2])
     for s in SUBJECTS:
-        cands=[b for b in bls if s in b['texts'] and 'السادس' in b['texts'] and len(pct_values(b))>=2 and signed_value(b) is not None]
+        cands=[b for b in bls if s in b['texts'] and 'السادس' in b['texts']
+               and len(pct_values(b))>=2 and signed_value(b) is not None]
         if cands:
             b=cands[-1]; ps=pct_values(b)
             y1446=min(ps,key=lambda x:abs(x[1]-0.40))[0]
@@ -114,9 +115,13 @@ def parse_pdf(pdf_bytes, pdf_name):
             p3[s]={'y1445':y1445,'y1446':y1446,'change':signed_value(b)}
     data['p3']=p3
 
-    # Page 7
+    # صفحة 7
     p7={}; bls=words_by_block(doc[6])
-    keys={'التحصيل العلمي':['التحصيل','العلمي'],'نواتج التعلم':['نواتج','التعلم'],'التعليم والتعلم':['التعليم','والتعلم']}
+    keys={
+        'التحصيل العلمي':['التحصيل','العلمي'],
+        'نواتج التعلم':['نواتج','التعلم'],
+        'التعليم والتعلم':['التعليم','والتعلم']
+    }
     for k,toks in keys.items():
         cands=[b for b in bls if all(t in b['texts'] for t in toks) and len(pct_values(b))>=2]
         if cands:
@@ -125,8 +130,9 @@ def parse_pdf(pdf_bytes, pdf_name):
             p7[k]={'value':degree,'priority':priority(b['texts'])}
     data['p7']=p7
 
-    # Page 10
-    p10={}; bls=words_by_block(doc[9]); codes={'القراءة':'3-1-1-1','الرياضيات':'3-1-1-2','العلوم':'3-1-1-3'}
+    # صفحة 10
+    p10={}; bls=words_by_block(doc[9])
+    codes={'القراءة':'3-1-1-1','الرياضيات':'3-1-1-2','العلوم':'3-1-1-3'}
     for s,code in codes.items():
         cands=[b for b in bls if code in b['texts']]
         if cands:
@@ -140,116 +146,309 @@ def parse_pdf(pdf_bytes, pdf_name):
 def extract_proposal(xlsx_bytes, school_name):
     wb=openpyxl.load_workbook(io.BytesIO(xlsx_bytes),data_only=True)
     target=norm(school_name)
-    best=None
     for ws in wb.worksheets:
         for row in ws.iter_rows(values_only=True):
             vals=['' if v is None else str(v) for v in row]
             joined=' | '.join(vals)
             if target and target in norm(joined):
-                best=vals
-                # likely proposal is the field containing need/increase wording
-                candidates=[v.strip() for v in vals if re.search(r'لا حاجة|اقتراح زيادة|زيادة عدد حصص|زيادة عدد الحصص',v)]
+                candidates=[v.strip() for v in vals if re.search(
+                    r'لا حاجة|اقتراح زيادة|زيادة عدد حصص|زيادة عدد الحصص',v)]
                 if candidates:
                     return max(candidates,key=len)
     return 'لم يتم العثور على المقترح في ملف Excel.'
 
 
 def validate(data):
-    problems=[]
-    for key in ['p2','p3','p7','p10']:
-        if len(data.get(key,{}))!=3: problems.append(key)
-    return problems
+    labels={'p2':'الفقرة 1','p3':'الفقرة 2','p7':'الفقرة 3','p10':'الفقرة 4'}
+    return [labels[k] for k in labels if len(data.get(k,{}))!=3]
 
 
 def font_path(bold=False):
-    candidates=(['/usr/share/fonts/truetype/noto/NotoKufiArabic-Bold.ttf','/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'] if bold else ['/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf','/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'])
+    candidates=(['/usr/share/fonts/truetype/noto/NotoKufiArabic-Bold.ttf',
+                 '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf']
+                if bold else
+                ['/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf',
+                 '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'])
     for p in candidates:
         if os.path.exists(p): return p
     return candidates[-1]
 
 
-def make_report_image(data, proposal, logo_bytes=None):
+def proposal_lines(text, max_chars=70):
+    text=str(text).strip()
+    if len(text)<=max_chars:
+        return [text]
+    words=text.split()
+    lines=[]; cur=[]
+    for w in words:
+        test=' '.join(cur+[w])
+        if len(test)>max_chars and cur:
+            lines.append(' '.join(cur)); cur=[w]
+        else:
+            cur.append(w)
+    if cur: lines.append(' '.join(cur))
+    return lines[:3]
+
+
+def make_report_image(data, proposal):
     W,H=1600,2263
     im=Image.new('RGB',(W,H),WHITE); d=ImageDraw.Draw(im)
     FB=font_path(True); FR=font_path(False)
+
     def F(sz,b=True): return ImageFont.truetype(FB if b else FR,sz)
     def center(txt,x,y,sz,color=NAVY,b=True):
-        t=ar(txt); f=F(sz,b); box=d.textbbox((0,0),t,font=f); d.text((x-(box[2]-box[0])/2,y),t,font=f,fill=color)
-    def rr(x1,y1,x2,y2,fill=WHITE,outline=BORDER,r=22,w=3): d.rounded_rectangle((x1,y1,x2,y2),radius=r,fill=fill,outline=outline,width=w)
-    def sec(y,title): d.rounded_rectangle((30,y,1570,y+70),radius=18,fill=NAVY); center(title,800,y+12,27,WHITE)
+        t=ar(txt); f=F(sz,b); box=d.textbbox((0,0),t,font=f)
+        d.text((x-(box[2]-box[0])/2,y),t,font=f,fill=color)
+    def rr(x1,y1,x2,y2,fill=WHITE,outline=BORDER,r=22,w=3):
+        d.rounded_rectangle((x1,y1,x2,y2),radius=r,fill=fill,outline=outline,width=w)
+    def sec(y,title):
+        d.rounded_rectangle((30,y,1570,y+70),radius=18,fill=NAVY)
+        center(title,800,y+12,27,WHITE)
 
-    center('المملكة العربية السعودية',230,32,24); center('وزارة التعليم',230,70,24); center('الإدارة العامة للتعليم بمنطقة الباحة',230,108,21); center('مساعد مدير عام التعليم',230,144,20); center('جودة خدمات المركز الوطني للمناهج',230,180,20)
+    # رأس التقرير
+    center('المملكة العربية السعودية',230,32,24)
+    center('وزارة التعليم',230,70,24)
+    center('الإدارة العامة للتعليم بمنطقة الباحة',230,108,21)
+    center('مساعد مدير عام التعليم',230,144,20)
+    center('جودة خدمات المركز الوطني للمناهج',230,180,20)
+
     center('مقترحات الخطط الدراسية',820,28,48)
-    rr(480,100,1140,180,fill=TEAL,outline=TEAL,r=28); center(data['school_name'],810,118,32,WHITE)
+    rr(480,100,1140,180,fill=TEAL,outline=TEAL,r=28)
+    center(data['school_name'],810,118,30,WHITE)
+
     logo_path=Path(__file__).with_name('moe_logo.png')
     if logo_path.exists():
-        logo=Image.open(logo_path).convert('RGB'); logo.thumbnail((280,190)); im.paste(logo,(1270,30))
+        logo=Image.open(logo_path).convert('RGB')
+        logo.thumbnail((280,190))
+        im.paste(logo,(1270,30))
 
     # 1
-    sec(225,'1. الفرق بين المدرسة والإدارة'); rr(30,300,1570,820)
+    sec(225,'1. الفرق بين المدرسة والإدارة')
+    rr(30,300,1570,820)
     xs=[250,700,1150]
     for s,x in zip(SUBJECTS,xs):
         v=data['p2'][s]
         center(s,x,340,23)
         rr(x-170,395,x+170,720,fill=PALE)
-        center('نتيجة المدرسة',x,420,18,TEAL); center(f"{v['school']:.1f}%",x,463,40,TEAL)
-        center('نتيجة الإدارة',x,535,18,GRAY); center(f"{v['admin']:.1f}%",x,578,40,GRAY)
-        center('الفارق',x,650,17,RED); center(f"{v['gap']:.1f} نقطة",x,682,25,RED)
+        center('نتيجة المدرسة',x,420,18,TEAL)
+        center(f"{v['school']:.1f}%",x,463,40,TEAL)
+        center('نتيجة الإدارة',x,535,18,GRAY)
+        center(f"{v['admin']:.1f}%",x,578,40,GRAY)
+        center('الفارق',x,650,17,RED)
+        center(f"{v['gap']:.1f} نقطة",x,682,25,RED)
 
-    #2
-    sec(850,'2. التغيير بين عامي 1445هـ و1446هـ'); rr(30,925,1570,1325)
+    # 2
+    sec(850,'2. التغيير بين عامي 1445هـ و1446هـ')
+    rr(30,925,1570,1325)
     for s,x in zip(SUBJECTS,xs):
-        v=data['p3'][s]; rr(x-190,970,x+190,1265,fill=PALE); center(s,x,990,23)
-        center('1445هـ',x-80,1050,17,GRAY); center(f"{v['y1445']:.1f}%",x-80,1090,31,GREEN)
-        center('1446هـ',x+80,1050,17,GRAY); center(f"{v['y1446']:.1f}%",x+80,1090,31,RED if v['change']<0 else GREEN)
-        col=RED if v['change']<0 else GREEN; center(f"التغير: {v['change']:+.1f} نقطة",x,1180,22,col)
+        v=data['p3'][s]
+        rr(x-190,970,x+190,1265,fill=PALE)
+        center(s,x,990,23)
+        center('1445هـ',x-80,1050,17,GRAY)
+        center(f"{v['y1445']:.1f}%",x-80,1090,31,GREEN)
+        center('1446هـ',x+80,1050,17,GRAY)
+        center(f"{v['y1446']:.1f}%",x+80,1090,31,RED if v['change']<0 else GREEN)
+        col=RED if v['change']<0 else GREEN
+        center(f"التغير: {v['change']:+.1f} نقطة",x,1180,22,col)
 
-    # 3 & 4
-    d.rounded_rectangle((30,1355,775,1425),radius=18,fill=NAVY); d.rounded_rectangle((825,1355,1570,1425),radius=18,fill=NAVY)
-    center('3. نتائج المدرسة في المجالات',402,1367,25,WHITE); center('4. مستوى المدرسة في المجالات (مؤشرات)',1195,1367,22,WHITE)
+    # 3 و4
+    d.rounded_rectangle((30,1355,775,1425),radius=18,fill=NAVY)
+    d.rounded_rectangle((825,1355,1570,1425),radius=18,fill=NAVY)
+    center('3. نتائج المدرسة في المجالات',402,1367,25,WHITE)
+    center('4. مستوى المدرسة في المجالات (مؤشرات)',1195,1367,22,WHITE)
     rr(30,1435,775,1900); rr(825,1435,1570,1900)
+
     keys=['التحصيل العلمي','نواتج التعلم','التعليم والتعلم']
     for k,x in zip(keys,[160,402,644]):
-        v=data['p7'][k]; rr(x-100,1490,x+100,1765,fill=PALE); center(k,x,1520,17); center(f"{v['value']:.2f}%",x,1600,30); color=RED if 'عاجلة' in v['priority'] else ORANGE if 'مرتفعة' in v['priority'] else GREEN; center(v['priority'],x,1685,15,color)
-    for i,s in enumerate(SUBJECTS):
-        y=1495+i*105; v=data['p10'][s]; rr(880,y,1515,y+82,fill=PALE); center(s,1420,y+17,19); center(f"{v['value']:.2f}%",1050,y+10,31); color=RED if 'عاجلة' in v['priority'] else ORANGE if 'مرتفعة' in v['priority'] else GREEN; center(v['priority'],1230,y+20,16,color)
+        v=data['p7'][k]
+        rr(x-100,1490,x+100,1765,fill=PALE)
+        center(k,x,1520,17)
+        center(f"{v['value']:.2f}%",x,1600,30)
+        color=RED if 'عاجلة' in v['priority'] else ORANGE if 'مرتفعة' in v['priority'] else GREEN
+        center(v['priority'],x,1685,15,color)
 
-    # proposal
-    rr(30,1940,1570,2180,fill='#F8FCFC',outline=TEAL,w=4); d.rounded_rectangle((620,1910,980,1980),radius=18,fill=TEAL); center('الاقتراح',800,1923,28,WHITE); center(proposal,800,2045,27,GREEN)
-    bio=io.BytesIO(); im.save(bio,format='PNG',quality=95); return bio.getvalue()
+    for i,s in enumerate(SUBJECTS):
+        y=1495+i*105; v=data['p10'][s]
+        rr(880,y,1515,y+82,fill=PALE)
+        center(s,1420,y+17,19)
+        center(f"{v['value']:.2f}%",1050,y+10,31)
+        color=RED if 'عاجلة' in v['priority'] else ORANGE if 'مرتفعة' in v['priority'] else GREEN
+        center(v['priority'],1230,y+20,16,color)
+
+    # الاقتراح
+    rr(30,1940,1570,2180,fill='#F8FCFC',outline=TEAL,w=4)
+    d.rounded_rectangle((620,1910,980,1980),radius=18,fill=TEAL)
+    center('الاقتراح',800,1923,28,WHITE)
+
+    lines=proposal_lines(proposal)
+    start_y=2025 if len(lines)==1 else 2005
+    for i,line in enumerate(lines):
+        center(line,800,start_y+i*48,25,GREEN)
+
+    bio=io.BytesIO()
+    im.save(bio,format='PNG',quality=95)
+    return bio.getvalue()
+
+
+def png_to_pdf(png_bytes):
+    image=Image.open(io.BytesIO(png_bytes)).convert('RGB')
+    bio=io.BytesIO()
+    image.save(bio,format='PDF',resolution=150.0)
+    return bio.getvalue()
+
+
+def priority_color(p):
+    if 'عاجلة' in p: return RED
+    if 'مرتفعة' in p: return ORANGE
+    if 'استدامة' in p: return GREEN
+    return TEAL
 
 
 st.set_page_config(page_title='مولد تقارير المدارس',layout='wide')
+
+st.markdown("""
+<style>
+.block-container {max-width: 1450px; padding-top: 1.3rem;}
+h1,h2,h3,p,div,span,label {direction: rtl; text-align: right;}
+[data-testid="stDataFrame"] {direction: rtl;}
+.report-card {
+    border:1px solid #d8e6e8; border-radius:14px; padding:14px;
+    background:#f8fbfb; margin-bottom:8px;
+}
+.metric-title {font-weight:700; color:#123E5A; margin-bottom:6px;}
+.metric-value {font-size:28px; font-weight:800; color:#123E5A;}
+.proposal-box {
+    border:2px solid #006E73; border-radius:16px; padding:18px;
+    background:#f7fcfc; color:#166534; font-size:22px; font-weight:700;
+}
+</style>
+""", unsafe_allow_html=True)
+
 st.title('مولد تقارير مقترحات الخطط الدراسية')
-st.caption('نسخة موثوقة تعتمد على Python/PyMuPDF بدل قراءة PDF داخل المتصفح. تم اختبار آلية الاستخراج على تقارير وادي ولف وخالد بن الوليد والعزيزية بمهد عُشرة.')
+st.caption('يرفع المستخدم تقرير المدرسة وملف Excel فقط. الأرقام من الصفحات 2 و3 و7 و10، والمقترح من Excel.')
 
 c1,c2=st.columns(2)
-with c1: pdf=st.file_uploader('تقرير المدرسة PDF',type=['pdf'])
-with c2: xlsx=st.file_uploader('ملف Excel المعتمد',type=['xlsx','xlsm'])
+with c1:
+    pdf=st.file_uploader('تقرير المدرسة PDF',type=['pdf'])
+with c2:
+    xlsx=st.file_uploader('ملف Excel المعتمد',type=['xlsx','xlsm'])
+
+if 'data' not in st.session_state:
+    st.session_state.data=None
+    st.session_state.proposal=None
 
 if pdf and xlsx:
-    if st.button('استخراج البيانات وإنشاء التقرير',type='primary'):
+    if st.button('استخراج البيانات',type='primary'):
         try:
             data=parse_pdf(pdf.getvalue(),pdf.name)
             proposal=extract_proposal(xlsx.getvalue(),data['school_name'])
             problems=validate(data)
             if problems:
-                st.error('لم يكتمل الاستخراج في: '+', '.join(problems))
+                st.error('لم يكتمل الاستخراج في: '+ '، '.join(problems))
+                st.session_state.data=None
+                st.session_state.proposal=None
             else:
-                st.success('تم استخراج الصفحات 2 و3 و7 و10 كاملة (3/3 لكل قسم).')
-                st.subheader(data['school_name'])
-                st.write('**الاقتراح:**',proposal)
-                st.markdown('### مراجعة القيم قبل التنزيل')
-                r1=[]
-                for s in SUBJECTS:
-                    a=data['p2'][s]; b=data['p3'][s]; c=data['p10'][s]
-                    r1.append({'المجال':s,'المدرسة صفحة2':a['school'],'الإدارة صفحة2':a['admin'],'الفارق':a['gap'],'1445 صفحة3':b['y1445'],'1446 صفحة3':b['y1446'],'التغير':b['change'],'مؤشر صفحة10':c['value'],'أولوية صفحة10':c['priority']})
-                st.dataframe(r1,use_container_width=True,hide_index=True)
-                st.write('**صفحة 7:**',data['p7'])
-                png=make_report_image(data,proposal)
-                st.image(png,use_container_width=True)
-                st.download_button('تحميل التقرير PNG',png,file_name=f"تقرير_{data['school_name']}.png",mime='image/png')
+                st.session_state.data=data
+                st.session_state.proposal=proposal
+                st.success('تم استخراج جميع البيانات بنجاح.')
         except Exception as e:
             st.exception(e)
 else:
-    st.info('ارفع ملف PDF وملف Excel، ثم اضغط زر الاستخراج.')
+    st.info('ارفع ملف PDF وملف Excel أولًا.')
+
+data=st.session_state.data
+proposal=st.session_state.proposal
+
+if data:
+    st.divider()
+    st.subheader(data['school_name'])
+
+    st.markdown('### مراجعة القيم قبل إنشاء التقرير النهائي')
+
+    # الفقرة 1
+    st.markdown('#### 1. الفرق بين المدرسة والإدارة')
+    cols=st.columns(3)
+    for col,s in zip(cols,SUBJECTS):
+        a=data['p2'][s]
+        with col:
+            st.markdown(
+                f"""<div class="report-card">
+                <div class="metric-title">{s}</div>
+                <div>المدرسة: <b>{a['school']:.1f}%</b></div>
+                <div>الإدارة: <b>{a['admin']:.1f}%</b></div>
+                <div style="color:{RED};font-weight:700">الفارق: {a['gap']:.1f} نقطة مئوية</div>
+                </div>""", unsafe_allow_html=True)
+
+    # الفقرة 2
+    st.markdown('#### 2. التغيير بين عامي 1445هـ و1446هـ')
+    cols=st.columns(3)
+    for col,s in zip(cols,SUBJECTS):
+        b=data['p3'][s]
+        colr=RED if b['change']<0 else GREEN
+        with col:
+            st.markdown(
+                f"""<div class="report-card">
+                <div class="metric-title">{s}</div>
+                <div>1445هـ: <b>{b['y1445']:.1f}%</b></div>
+                <div>1446هـ: <b>{b['y1446']:.1f}%</b></div>
+                <div style="color:{colr};font-weight:700">التغير: {b['change']:+.1f} نقطة مئوية</div>
+                </div>""", unsafe_allow_html=True)
+
+    # الفقرة 3
+    st.markdown('#### 3. نتائج المدرسة في المجالات')
+    cols=st.columns(3)
+    for col,k in zip(cols,['التحصيل العلمي','نواتج التعلم','التعليم والتعلم']):
+        v=data['p7'][k]
+        with col:
+            st.markdown(
+                f"""<div class="report-card">
+                <div class="metric-title">{k}</div>
+                <div class="metric-value">{v['value']:.2f}%</div>
+                <div style="color:{priority_color(v['priority'])};font-weight:700">{v['priority']}</div>
+                </div>""", unsafe_allow_html=True)
+
+    # الفقرة 4
+    st.markdown('#### 4. مستوى المدرسة في المجالات (مؤشرات)')
+    cols=st.columns(3)
+    for col,s in zip(cols,SUBJECTS):
+        v=data['p10'][s]
+        with col:
+            st.markdown(
+                f"""<div class="report-card">
+                <div class="metric-title">{s}</div>
+                <div class="metric-value">{v['value']:.2f}%</div>
+                <div style="color:{priority_color(v['priority'])};font-weight:700">{v['priority']}</div>
+                </div>""", unsafe_allow_html=True)
+
+    st.markdown('#### الاقتراح')
+    st.markdown(f'<div class="proposal-box">{proposal}</div>',unsafe_allow_html=True)
+
+    st.warning('راجع القيم أعلاه. إذا كانت صحيحة اضغط زر إنشاء التقرير النهائي.')
+
+    if st.button('إنشاء التقرير النهائي',type='primary'):
+        png=make_report_image(data,proposal)
+        pdf_bytes=png_to_pdf(png)
+        st.session_state.png=png
+        st.session_state.pdf=pdf_bytes
+
+if st.session_state.get('png'):
+    st.divider()
+    st.markdown('## التقرير النهائي')
+    st.image(st.session_state.png,use_container_width=True)
+    c1,c2=st.columns(2)
+    with c1:
+        st.download_button(
+            'تحميل التقرير PNG',
+            st.session_state.png,
+            file_name=f"تقرير_{data['school_name']}.png",
+            mime='image/png',
+            use_container_width=True
+        )
+    with c2:
+        st.download_button(
+            'تحميل التقرير PDF',
+            st.session_state.pdf,
+            file_name=f"تقرير_{data['school_name']}.pdf",
+            mime='application/pdf',
+            use_container_width=True
+        )

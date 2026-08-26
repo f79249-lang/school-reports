@@ -226,42 +226,39 @@ def validate(data):
 
 
 def font_path(bold=False):
-    """ابحث عن خط عربي/يونيكود موجود فعليًا على خادم Streamlit."""
-    preferred = (
-        ['NotoKufiArabic-Bold.ttf', 'NotoSansArabic-Bold.ttf',
-         'DejaVuSans-Bold.ttf', 'LiberationSans-Bold.ttf']
+    """اختر خطًا يدعم العربية فعليًا، ولا تستخدم أي خط عشوائي."""
+    import subprocess
+
+    families = (
+        ['Noto Kufi Arabic', 'Noto Sans Arabic', 'DejaVu Sans', 'Liberation Sans']
         if bold else
-        ['NotoSansArabic-Regular.ttf', 'NotoKufiArabic-Regular.ttf',
-         'DejaVuSans.ttf', 'LiberationSans-Regular.ttf']
+        ['Noto Sans Arabic', 'Noto Kufi Arabic', 'DejaVu Sans', 'Liberation Sans']
     )
 
-    roots = [
-        Path('/usr/share/fonts'),
-        Path('/usr/local/share/fonts'),
-        Path('/home/adminuser/.local/share/fonts'),
-        Path('/home/appuser/.local/share/fonts'),
+    # fc-match هو الأكثر موثوقية على Linux/Streamlit لأنه يعيد المسار الحقيقي للخط.
+    for family in families:
+        try:
+            style = ':style=Bold' if bold else ''
+            result = subprocess.run(
+                ['fc-match', '-f', '%{file}', family + style],
+                capture_output=True, text=True, timeout=3
+            )
+            path=result.stdout.strip()
+            if path and os.path.exists(path):
+                return path
+        except Exception:
+            pass
+
+    # مسارات معروفة كحل احتياطي، لكن فقط لخطوط تدعم العربية.
+    candidates = [
+        '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf' if bold
+        else '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+        '/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf' if bold
+        else '/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf',
     ]
-
-    # البحث بالاسم أولًا
-    for wanted in preferred:
-        for root in roots:
-            if root.exists():
-                matches = list(root.rglob(wanted))
-                if matches:
-                    return str(matches[0])
-
-    # ثم أي خط TrueType/OpenType متاح يدعم Unicode غالبًا
-    fallback_names = (
-        ['*Bold*.ttf', '*Bold*.otf', '*.ttf', '*.otf']
-        if bold else
-        ['*.ttf', '*.otf']
-    )
-    for pattern in fallback_names:
-        for root in roots:
-            if root.exists():
-                matches = list(root.rglob(pattern))
-                if matches:
-                    return str(matches[0])
+    for p in candidates:
+        if os.path.exists(p):
+            return p
 
     return None
 
@@ -289,13 +286,9 @@ def make_report_image(data, proposal):
 
     def F(sz,b=True):
         path = FB if b else FR
-        if path:
-            try:
-                return ImageFont.truetype(path, sz)
-            except Exception:
-                pass
-        # fallback يمنع تعطل إنشاء التقرير حتى لو اختلفت خطوط خادم Streamlit
-        return ImageFont.load_default()
+        if not path:
+            raise RuntimeError('لم يتم العثور على خط يدعم العربية على خادم Streamlit.')
+        return ImageFont.truetype(path, sz)
     def center(txt,x,y,sz,color=NAVY,b=True):
         t=ar(txt); f=F(sz,b); box=d.textbbox((0,0),t,font=f)
         d.text((x-(box[2]-box[0])/2,y),t,font=f,fill=color)
@@ -427,8 +420,6 @@ h1,h2,h3,p,div,span,label {direction: rtl; text-align: right;}
 """, unsafe_allow_html=True)
 
 st.title('مولد تقارير مقترحات الخطط الدراسية')
-if not font_path(False) or not font_path(True):
-    st.warning('لم يعثر الخادم على خط عربي مخصص؛ سيستخدم التطبيق خطًا احتياطيًا دون إيقاف إنشاء التقرير.')
 
 st.caption('يرفع المستخدم تقرير المدرسة وملف Excel فقط. الأرقام من الصفحات 2 و3 و7 و10، والمقترح من Excel. يدعم الصفوف المختلفة دون افتراض صف ثابت.')
 
